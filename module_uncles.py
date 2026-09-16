@@ -73,19 +73,19 @@ class module_uncles(GDO_Module):
         }
 
     def battle(self, attacker: GDO_UncleUserCard | GDO_UncleCard, defender: GDO_UncleUserCard | GDO_UncleCard) -> tuple[int, bool, bool]:
-        """FFXIV-like card damage: potency, main stat, mitigation, crit, direct hit, variance."""
+        """FFXIV-like damage over the three WeChall offence/defence stat pairs."""
         attack = self.card_stats(attacker)
         defense = self.card_stats(defender)
-        potency = 100 + attack['crypto'] + attack['stegano']
-        main_stat = attack['programming'] + attack['exploit'] + attack['math'] + attack['info']
+        # The first stat of every pair attacks the second stat of its opponent.
+        # Crypto -> Stegano, Math -> Programming, Exploit -> Infosec.
+        offence = attack['crypto'] + attack['math'] + attack['exploit']
+        mitigation = defense['stegano'] + defense['programming'] + defense['info']
+        potency = 100 + offence
         weapon_damage = attack['rating'] / 10
-        determination = attack['math']
-        mitigation = defense['crypto'] + defense['stegano'] + defense['info']
-        damage = potency * (100 + main_stat) / 100
-        damage *= (100 + weapon_damage + determination / 2) / 100
+        damage = potency * (100 + weapon_damage) / 100
         damage *= 1000 / (1000 + mitigation * 4)
         critical = randint(1, 100) <= min(50, 5 + attack['exploit'] // 2)
-        direct = randint(1, 100) <= min(50, 5 + attack['programming'] // 2)
+        direct = randint(1, 100) <= min(50, 5 + attack['math'] // 2)
         if critical:
             damage *= 1.4 + attack['exploit'] / 1000
         if direct:
