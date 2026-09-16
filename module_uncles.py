@@ -33,7 +33,7 @@ class module_uncles(GDO_Module):
     def seed_starter_cards(self):
         catalog = Path(__file__).with_name('cards.toml')
         for card in tomllib.loads(catalog.read_text())['card']:
-            GDO_UncleCard.blank(card).soft_replace()
+            GDO_UncleCard.blank({key: str(value) for key, value in card.items()}).soft_replace()
 
     def rare_drop(self, user: GDO_User) -> GDO_UncleCard | None:
         if randint(1, 100) > self.get_config_value('unc_rare_drop'):
