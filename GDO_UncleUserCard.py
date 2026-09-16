@@ -1,6 +1,7 @@
 from gdo.base.GDO import GDO
 from gdo.base.GDT import GDT
 from gdo.core.GDT_Object import GDT_Object
+from gdo.core.GDT_Unique import GDT_Unique
 from gdo.core.GDT_User import GDT_User
 from gdo.uncles.GDO_UncleCard import GDO_UncleCard
 
@@ -12,4 +13,5 @@ class GDO_UncleUserCard(GDO):
         return [
             GDT_User('uc_user').primary().cascade_delete(),
             GDT_Object('uc_card').primary().table(GDO_UncleCard.table()).cascade_delete(),
+            GDT_Unique('uc_unq_user_card').unique_columns('uc_user', 'uc_card'),
         ]
