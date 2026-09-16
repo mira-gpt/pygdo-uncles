@@ -1,4 +1,6 @@
-from random import choice, randint
+from random import choice, randint, uniform
+from pathlib import Path
+import tomllib
 
 from gdo.base.GDO import GDO
 from gdo.base.GDT import GDT
@@ -8,14 +10,13 @@ from gdo.core.GDT_Bool import GDT_Bool
 from gdo.core.GDT_UInt import GDT_UInt
 from gdo.uncles.UNC_Card import UNC_Card
 from gdo.uncles.UNC_UserCard import UNC_UserCard
-from gdo.wechall.method.ranking import ranking
 
 
 class module_uncles(GDO_Module):
     """WeChall player cards: starter decks, confrontations, and card stakes."""
 
     def gdo_dependencies(self) -> list:
-        return ['core', 'table', 'user', 'wechall']
+        return ['core', 'table', 'user']
 
     def gdo_classes(self) -> list[type[GDO]]:
         return [UNC_Card, UNC_UserCard]
@@ -30,29 +31,9 @@ class module_uncles(GDO_Module):
         self.seed_starter_cards()
 
     def seed_starter_cards(self):
-        if UNC_Card.table().count_where():
-            return
-        users = ranking().gdo_table_query().limit(200).exec().fetch_all()
-        for rank, user in enumerate(users[:100], 1):
-            self.seed_card(user.get_name(), rank)
-        for index, user in enumerate(users[99:200:10]):
-            self.seed_card(user.get_name(), 100 + index * 10)
-
-    @staticmethod
-    def seed_card(nickname: str, rank: int):
-        strength = max(1, 60 - rank // 3)
-        stats = [max(1, strength + ((rank * factor) % 11) - 5) for factor in (3, 5, 7, 11, 13, 17)]
-        UNC_Card.blank({
-                'card_nickname': nickname,
-                'card_rank': rank,
-                'card_crypto': stats[0],
-                'card_stegano': stats[1],
-                'card_programming': stats[2],
-                'card_exploit': stats[3],
-                'card_math': stats[4],
-                'card_info': stats[5],
-                'card_rating': sum(stats),
-            }).insert()
+        catalog = Path(__file__).with_name('cards.toml')
+        for card in tomllib.loads(catalog.read_text())['card']:
+            UNC_Card.blank(card).soft_replace()
 
     def rare_drop(self, user: GDO_User) -> UNC_Card | None:
         if randint(1, 100) > self.get_config_value('unc_rare_drop'):
@@ -78,13 +59,41 @@ class module_uncles(GDO_Module):
     def ensure_starter_deck(self, user: GDO_User):
         if user.get_setting_value('unc_starter_deck'):
             return
-        for card in UNC_Card.table().select().exec().fetch_all():
+        for card in UNC_Card.table().select().where('card_rank >= 100').exec().fetch_all():
             self.add_card(user, card)
         user.save_setting('unc_starter_deck', '1')
 
     def random_card(self, user: GDO_User) -> UNC_UserCard | None:
         cards = UNC_UserCard.table().select().where(f'uc_user={user.get_id()} AND uc_amount>0').exec().fetch_all()
         return cards[randint(0, len(cards) - 1)] if cards else None
+
+    @staticmethod
+    def card_stats(card: UNC_UserCard) -> dict[str, int]:
+        source = UNC_Card.table().get_by_id(card.gdo_val('uc_card'))
+        return {
+            key: int(source.gdo_val(f'card_{key}'))
+            for key in ('crypto', 'stegano', 'programming', 'exploit', 'math', 'info', 'rating')
+        }
+
+    def battle(self, attacker: UNC_UserCard, defender: UNC_UserCard) -> tuple[int, bool, bool]:
+        """FFXIV-like card damage: potency, main stat, mitigation, crit, direct hit, variance."""
+        attack = self.card_stats(attacker)
+        defense = self.card_stats(defender)
+        potency = 100 + attack['crypto'] + attack['stegano']
+        main_stat = attack['programming'] + attack['exploit'] + attack['math'] + attack['info']
+        weapon_damage = attack['rating'] / 10
+        determination = attack['math']
+        mitigation = defense['crypto'] + defense['stegano'] + defense['info']
+        damage = potency * (100 + main_stat) / 100
+        damage *= (100 + weapon_damage + determination / 2) / 100
+        damage *= 1000 / (1000 + mitigation * 4)
+        critical = randint(1, 100) <= min(50, 5 + attack['exploit'] // 2)
+        direct = randint(1, 100) <= min(50, 5 + attack['programming'] // 2)
+        if critical:
+            damage *= 1.4 + attack['exploit'] / 1000
+        if direct:
+            damage *= 1.25
+        return max(1, round(damage * uniform(0.95, 1.05))), critical, direct
 
     def transfer_card(self, card: UNC_UserCard, winner: GDO_User):
         card.increase('uc_amount', -1)
