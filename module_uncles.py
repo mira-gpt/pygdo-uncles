@@ -43,7 +43,7 @@ class module_uncles(GDO_Module):
         ]
 
     def gdo_module_config(self) -> list[GDT]:
-        return [GDT_Duration('uncle_cooldown').not_null().min(0).initial('1m')]
+        return [GDT_Duration('uncle_cooldown').not_null().min(0).initial('10m')]
 
     async def gdo_install(self):
         self.seed_starter_cards()

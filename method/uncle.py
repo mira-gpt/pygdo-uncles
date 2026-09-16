@@ -22,12 +22,12 @@ class uncle(Method):
     def gdo_parameters(self) -> list[GDT]:
         return [
             # IRC nicknames repeat across connectors. A duel names somebody
-            # in the current network, never a similarly named remote bot.
+            # on the current network, even when they are elsewhere on it.
             GDT_User('user').same_server().not_null(),
             GDT_UncleCard('card').default_random_own_card(),
         ]
 
-    def gdo_execute(self) -> GDT:
+    async def gdo_execute(self) -> GDT:
         attacker = self._env_user
         defender = self.param_value('user')
         if attacker.get_id() == defender.get_id():
@@ -55,6 +55,9 @@ class uncle(Method):
         module.claim_card(winner, lost_card)
         verb = module.verb()
         if winner is attacker:
+            await defender.send('msg_uncle_opponent_lost', (
+                self.card_name(lost_card), attacker.render_displayname(),
+            ))
             key = 'msg_uncle_won'
             args = (
                 self.card_title(attacker_card), attack_skill, attacker_damage, attacker_max,
@@ -62,6 +65,9 @@ class uncle(Method):
                 attacker.render_displayname(), self.card_name(attacker_card), verb, defender.render_displayname(), self.card_name(defender_card),
             )
         else:
+            await defender.send('msg_uncle_opponent_won', (
+                self.card_name(lost_card), attacker.render_displayname(),
+            ))
             key = 'msg_uncle_lost'
             args = (
                 self.card_title(attacker_card), attack_skill, attacker_damage, attacker_max,

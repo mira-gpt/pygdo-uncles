@@ -42,7 +42,7 @@ class uncle_mob(Method):
             f'vs. {mob.render_name()}({defense_skill}:{mob_damage}/{mob_max})'
         )
         if player_damage < mob_damage:
-            return self.msg('msg_uncle_mob_lost', (combat, mob_name, user.render_displayname(), uncle.card_name(player_card)))
+            return self.msg('msg_uncle_mob_lost', (combat, mob_name, uncle.card_name(player_card)))
         user.increase_setting('uncles_won')
         module.add_card(user, mob)
         return self.msg('msg_uncle_mob_won', (combat, user.render_displayname(), uncle.card_name(player_card), mob_name))
