@@ -2,10 +2,10 @@ from random import randint
 
 from gdo.base.GDT import GDT
 from gdo.base.Method import Method
-from gdo.core.GDT_Object import GDT_Object
+from gdo.core.GDT_String import GDT_String
 from gdo.core.GDT_User import GDT_User
-from gdo.uncles.UNC_Card import UNC_Card
-from gdo.uncles.UNC_UserCard import UNC_UserCard
+from gdo.uncles.GDO_UncleCard import GDO_UncleCard
+from gdo.uncles.GDO_UncleUserCard import GDO_UncleUserCard
 
 
 class uncle(Method):
@@ -14,7 +14,7 @@ class uncle(Method):
     def gdo_parameters(self) -> list[GDT]:
         return [
             GDT_User('user').not_null().same_channel(self._env_channel),
-            GDT_Object('card').not_null().table(UNC_Card.table()),
+            GDT_String('card').not_null().maxlen(64),
         ]
 
     def gdo_execute(self) -> GDT:
@@ -25,8 +25,8 @@ class uncle(Method):
         module = self.gdo_module()
         module.ensure_starter_deck(attacker)
         module.ensure_starter_deck(defender)
-        selected = self.param_value('card')
-        attacker_card = UNC_UserCard.table().get_by_vals({'uc_user': attacker.get_id(), 'uc_card': selected.get_id()})
+        selected = self.get_card(self.param_val('card'))
+        attacker_card = selected and GDO_UncleUserCard.table().get_by_vals({'uc_user': attacker.get_id(), 'uc_card': selected.get_id()})
         defender_card = module.random_card(defender)
         if not attacker_card or not defender_card:
             return self.err('err_uncle_no_cards')
@@ -34,7 +34,7 @@ class uncle(Method):
         defender_damage, _, _ = module.battle(defender_card, attacker_card)
         winner, loser = (attacker, defender) if attacker_damage >= defender_damage else (defender, attacker)
         lost_card = defender_card if winner is attacker else attacker_card
-        module.transfer_card(lost_card, winner)
+        module.exchange_cards(attacker_card, defender_card)
         drop = module.rare_drop(winner)
         key = 'msg_uncle_won_drop' if drop else 'msg_uncle_won'
         flags = (' critical' if critical else '') + (' direct' if direct else '')
@@ -44,5 +44,12 @@ class uncle(Method):
         return self.msg(key, args)
 
     @staticmethod
-    def card_name(card: UNC_UserCard) -> str:
-        return UNC_Card.table().get_by_id(card.gdo_val('uc_card')).gdo_val('card_nickname')
+    def card_name(card: GDO_UncleUserCard) -> str:
+        return GDO_UncleCard.table().get_by_id(card.gdo_val('uc_card')).gdo_val('card_nickname')
+
+    @staticmethod
+    def get_card(card: str) -> GDO_UncleCard | None:
+        """Cards are addressed by their permanent ID or nickname."""
+        if card.isdecimal():
+            return GDO_UncleCard.table().get_by_id(card)
+        return GDO_UncleCard.table().get_by_vals({'card_nickname': card})

@@ -4,19 +4,18 @@ from gdo.core.GDO_User import GDO_User
 from gdo.core.GDT_UInt import GDT_UInt
 from gdo.core.GDT_Name import GDT_Name
 from gdo.table.MethodQueryTable import MethodQueryTable
-from gdo.uncles.UNC_Card import UNC_Card
-from gdo.uncles.UNC_UserCard import UNC_UserCard
+from gdo.uncles.GDO_UncleUserCard import GDO_UncleUserCard
 
 
 class uncles(MethodQueryTable):
     """The caller's current collectible card deck."""
 
     def gdo_table(self) -> GDO:
-        return UNC_UserCard.table()
+        return GDO_UncleUserCard.table()
 
     def gdo_table_query(self) -> Query:
         self.gdo_module().ensure_starter_deck(GDO_User.current())
-        return UNC_UserCard.table().select().join_object('uc_card').where(f'uc_user={GDO_User.current().get_id()}').order('card_rank ASC')
+        return GDO_UncleUserCard.table().select().join_object('uc_card').where(f'uc_user={GDO_User.current().get_id()}').order('card_rank ASC')
 
     def gdo_table_headers(self) -> list:
         return [
@@ -29,5 +28,4 @@ class uncles(MethodQueryTable):
             GDT_UInt('card_math').label('math'),
             GDT_UInt('card_info').label('info'),
             GDT_UInt('card_rating').label('rating'),
-            GDT_UInt('uc_amount').label('amount'),
         ]

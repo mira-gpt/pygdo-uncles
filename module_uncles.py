@@ -8,8 +8,8 @@ from gdo.base.GDO_Module import GDO_Module
 from gdo.core.GDO_User import GDO_User
 from gdo.core.GDT_Bool import GDT_Bool
 from gdo.core.GDT_UInt import GDT_UInt
-from gdo.uncles.UNC_Card import UNC_Card
-from gdo.uncles.UNC_UserCard import UNC_UserCard
+from gdo.uncles.GDO_UncleCard import GDO_UncleCard
+from gdo.uncles.GDO_UncleUserCard import GDO_UncleUserCard
 
 
 class module_uncles(GDO_Module):
@@ -19,7 +19,7 @@ class module_uncles(GDO_Module):
         return ['core', 'table', 'user']
 
     def gdo_classes(self) -> list[type[GDO]]:
-        return [UNC_Card, UNC_UserCard]
+        return [GDO_UncleCard, GDO_UncleUserCard]
 
     def gdo_user_config(self) -> list[GDT]:
         return [GDT_Bool('unc_starter_deck').not_null().initial('0').hidden()]
@@ -33,49 +33,46 @@ class module_uncles(GDO_Module):
     def seed_starter_cards(self):
         catalog = Path(__file__).with_name('cards.toml')
         for card in tomllib.loads(catalog.read_text())['card']:
-            UNC_Card.blank(card).soft_replace()
+            GDO_UncleCard.blank(card).soft_replace()
 
-    def rare_drop(self, user: GDO_User) -> UNC_Card | None:
+    def rare_drop(self, user: GDO_User) -> GDO_UncleCard | None:
         if randint(1, 100) > self.get_config_value('unc_rare_drop'):
             return None
-        cards = UNC_Card.table().select().where('card_rank <= 100').exec().fetch_all()
+        cards = GDO_UncleCard.table().select().where('card_rank <= 100').exec().fetch_all()
+        cards = [card for card in cards if not GDO_UncleUserCard.table().get_by_vals({'uc_user': user.get_id(), 'uc_card': card.get_id()})]
         card = choice(cards) if cards else None
         if card:
             self.add_card(user, card)
         return card
 
     @staticmethod
-    def add_card(user: GDO_User, card: UNC_Card):
-        owned = UNC_UserCard.table().get_by_vals({'uc_user': user.get_id(), 'uc_card': card.get_id()})
-        if owned:
-            owned.increase('uc_amount', 1)
-        else:
-            UNC_UserCard.blank({
+    def add_card(user: GDO_User, card: GDO_UncleCard):
+        if not GDO_UncleUserCard.table().get_by_vals({'uc_user': user.get_id(), 'uc_card': card.get_id()}):
+            GDO_UncleUserCard.blank({
                 'uc_user': user.get_id(),
                 'uc_card': card.get_id(),
-                'uc_amount': '1',
             }).insert()
 
     def ensure_starter_deck(self, user: GDO_User):
         if user.get_setting_value('unc_starter_deck'):
             return
-        for card in UNC_Card.table().select().where('card_rank >= 100').exec().fetch_all():
+        for card in GDO_UncleCard.table().select().where('card_rank >= 100').exec().fetch_all():
             self.add_card(user, card)
         user.save_setting('unc_starter_deck', '1')
 
-    def random_card(self, user: GDO_User) -> UNC_UserCard | None:
-        cards = UNC_UserCard.table().select().where(f'uc_user={user.get_id()} AND uc_amount>0').exec().fetch_all()
+    def random_card(self, user: GDO_User) -> GDO_UncleUserCard | None:
+        cards = GDO_UncleUserCard.table().select().where(f'uc_user={user.get_id()}').exec().fetch_all()
         return cards[randint(0, len(cards) - 1)] if cards else None
 
     @staticmethod
-    def card_stats(card: UNC_UserCard) -> dict[str, int]:
-        source = UNC_Card.table().get_by_id(card.gdo_val('uc_card'))
+    def card_stats(card: GDO_UncleUserCard | GDO_UncleCard) -> dict[str, int]:
+        source = card if isinstance(card, GDO_UncleCard) else GDO_UncleCard.table().get_by_id(card.gdo_val('uc_card'))
         return {
             key: int(source.gdo_val(f'card_{key}'))
             for key in ('crypto', 'stegano', 'programming', 'exploit', 'math', 'info', 'rating')
         }
 
-    def battle(self, attacker: UNC_UserCard, defender: UNC_UserCard) -> tuple[int, bool, bool]:
+    def battle(self, attacker: GDO_UncleUserCard | GDO_UncleCard, defender: GDO_UncleUserCard | GDO_UncleCard) -> tuple[int, bool, bool]:
         """FFXIV-like card damage: potency, main stat, mitigation, crit, direct hit, variance."""
         attack = self.card_stats(attacker)
         defense = self.card_stats(defender)
@@ -95,6 +92,27 @@ class module_uncles(GDO_Module):
             damage *= 1.25
         return max(1, round(damage * uniform(0.95, 1.05))), critical, direct
 
-    def transfer_card(self, card: UNC_UserCard, winner: GDO_User):
-        card.increase('uc_amount', -1)
-        self.add_card(winner, UNC_Card.table().get_by_id(card.gdo_val('uc_card')))
+    @staticmethod
+    def mob_card() -> GDO_UncleCard:
+        """Most mobs are rank 50-100; a 5% roll creates a precious high-rank encounter."""
+        rank = randint(1, 49) if randint(1, 100) <= 5 else randint(50, 100)
+        power = 105 - rank
+        return GDO_UncleCard.blank({
+            'card_id': 0,
+            'card_nickname': f'Rank {rank} mob',
+            'card_rank': rank,
+            'card_crypto': power,
+            'card_stegano': power,
+            'card_programming': power,
+            'card_exploit': power,
+            'card_math': power,
+            'card_info': power,
+            'card_rating': power * 6,
+        })
+
+    @staticmethod
+    def exchange_cards(a: GDO_UncleUserCard, b: GDO_UncleUserCard):
+        a_card, b_card = a.gdo_val('uc_card'), b.gdo_val('uc_card')
+        if a_card != b_card:
+            a.save_val('uc_card', b_card)
+            b.save_val('uc_card', a_card)
